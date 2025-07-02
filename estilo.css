@@ -1,0 +1,48 @@
+/* Fondo general del dashboard */
+body {
+  background-color: #F7F7F7;   /* gris claro */
+  color: #636363;              /* texto gris oscuro */
+  font-family: 'Helvetica', sans-serif;
+}
+
+/* Encabezados */
+h1, h2, h3 {
+  color: #0C2C84;              /* azul marino */
+}
+
+/* Barra de navegación (si tienes) */
+.navbar, .navbar-default {
+  background-color: #225EA8;   /* azul fuerte */
+  color: white;
+}
+
+/* Paneles de contenido */
+.panel, .card {
+  background-color: white;
+  border: 1px solid #C7E9B4;   /* verde claro para borde */
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Botones principales */
+.btn, .btn-primary {
+  background-color: #41B6C4;   /* turquesa */
+  color: white;
+  border: none;
+}
+
+/* Enlaces */
+a {
+  color: #1D91C0;              /* azul medio */
+}
+a:hover {
+  color: #0C2C84;
+}
+
+/* Footer (si tienes uno) */
+footer {
+  background-color: #225EA8;
+  color: white;
+  padding: 10px;
+}
