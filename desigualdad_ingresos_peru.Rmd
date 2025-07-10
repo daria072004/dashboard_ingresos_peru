@@ -1,0 +1,617 @@
+---
+title: "Desigualdades estructurales en el ingreso mensual: Un análisis multidimensional a nivel provincial en el Perú"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+    css: estilo.css
+runtime: shiny
+    
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(plotly)
+library(ggplot2)
+library(RColorBrewer)
+library(readr)
+library(rio)
+library(dplyr)
+library(cluster)
+library(factoextra)
+library(leaflet)
+library(sf)
+library(stringi)
+library(knitr)
+
+limpiar_nombres <- function(x) {
+  x <- toupper(x)
+  x <- stri_trans_general(x, "Latin-ASCII")
+  x <- gsub("[^A-Z ]", "", x)
+  x <- trimws(x)
+  x <- gsub("nazca|nasca", "nazca", x)
+  return(x)
+}
+
+colores_set2 <- brewer.pal(n = 8, name = "Set2")
+
+mergesupreme1 <- read_csv("datafmergesupreme.csv")
+mergesupreme_sin_influyentes <- read_csv("mergesupremesininflu.csv")
+```
+
+Introducción {data-icon="fa-chart-bar"}
+=======================================================================
+Column izquierda {data-width=500}
+-----------------------------------------------------------------------
+Descripción del estudio
+
+### **Tema de investigación** 
+El efecto del nivel educativo, la lengua materna, las limitaciones físicas y cognitivas, el estado de salud y el tipo de empleo en el ingreso percibido por la población adulta en Perú.
+
+### **Pregunta de investigación** 
+¿En qué medida el nivel educativo, el empleo formal y las limitaciones físicas y cognitivas, la lengua materna y el estado de salud influyen en el ingreso de las personas, considerando las condiciones socioeconómicas y agrupandolas por Provincia?
+
+### **Justificación** 
+La presente investigación busca analizar los factores que inciden en los ingresos mensuales en Perú, partiendo de la hipótesis de que el empleo formal, el acceso a Internet y su uso educativo se asocian positivamente con mayores ingresos. Esto se fundamente en literatura que destaca la importancia de la conectividad para la inclusión y el desarrollo de habilidades (CEPAL,2021). Asimismo, se vuelve a recalcar las brechas de género estructurales en la región (OIT, 2020) y la valoración de la experiencia laboral acumulada. Sin embargo, un punto central de esta investigación es el desafío que plante a la teoría tradicional que propone una mayor educación se relaciona directamente con más ingresos, en la práctica no siempre es así, especialmente en Perú.
+
+### **Hipotesis**
+Las personas con empleo formal, acceso a Internet y uso educativo de este recurso presentan mayores ingresos mensuales. Asimismo, los hombres y las personas mayores tienden a percibir ingresos superiores. Sin embargo, el efecto del nivel educativo no sigue una lógica lineal, y en algunos casos, las personas con educación inicial completa pueden superar en ingresos a aquellas con educación superior.
+
+Column {data-width=500 .tabset}
+-----------------------------------------------------------------------
+
+```{r}
+#| out.width: "100%"
+#| fig.align: "center"
+
+# URL de la imagen de LinkedIn
+imagen_url <- "https://media.licdn.com/dms/image/v2/D4E22AQFGHCUNZqgUbw/feedshare-shrink_800/feedshare-shrink_800/0/1681836871132?e=1754524800&v=beta&t=BqO_F2BbyvMgR0nYR9_I_GJfq6sZWngyRK7gpa686DE"
+
+# Mostrar imagen
+knitr::include_graphics(imagen_url)
+```
+
+Variable dependiente  {data-icon="fa-chart-bar"}
+=======================================================================
+
+Column {data-width=500 .tabset}
+-----------------------------------------------------------------------
+Gráficos de Ingreso Total
+
+### Ingreso Total Mensual
+```{r}
+ggplot(mergesupreme1, aes(x = Ingreso_total_combinado)) +
+  geom_histogram(bins = 30, fill = "#56B4E9", color = "black", alpha = 0.8) +
+  labs(
+    title = "Distribución de Ingreso Total (Original)",
+    subtitle = "Fuente: ENAHO 2023",
+    x = "Ingreso Total",
+    y = "Frecuencia"
+  ) +
+  theme_minimal(base_size = 14)
+```
+
+### Ingreso Total Mensual (log)
+```{r}
+ggplot(mergesupreme_sin_influyentes, aes(x = log(Ingreso_total_combinado))) +
+  geom_histogram(bins = 30, fill = "#E69F00", color = "black", alpha = 0.85) +
+  labs(
+    title = "Distribución de log(Ingreso Total)",
+    subtitle = "Fuente: ENAHO 2023",
+    x = "log(Ingreso Total)",
+    y = "Frecuencia"
+  ) +
+  theme_minimal(base_size = 14)
+```
+
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### Resumen Estadístico {.no-padding}
+
+```{r}
+summary(mergesupreme1$Ingreso_total_combinado)
+```
+
+Los datos revelan una marcada desigualdad en la distribución de ingresos. La gran diferencia entre la media (S/63,586) y la mediana (S/186) muestra una fuerte asimetría, donde unos pocos hogares tienen ingresos muy altos, mientras la mayoría reporta valores bajos o incluso cero.  Un hallazgo importante es que el 25% de los hogares declara ingresos iguales a cero, lo que podría deberse a:
+
+Alta informalidad laboral (trabajadores no registrados)
+
+Desempleo o ingresos no monetarios (autoconsumo, trueque)
+
+Limitaciones en la medición (dificultad para captar todos los ingresos)
+
+La transformación logarítmica aplicada a los datos confirma que la  distribución no sigue un patrón normal (como una campana simétrica). Existe una concentración extrema, es decir  pocos hogares tienen ingresos muchísimo más altos que el resto. 
+
+Estos resultados muestran una economía profundamente desigual, donde el crecimiento beneficia desproporcionadamente a un pequeño grupo
+
+
+Variables independientes y de control  {data-icon="fa-table"}
+=======================================================================
+
+Column {data-width=650 .tabset}
+-----------------------------------------------------------------------
+
+Gráficos de las variables independientes y de control
+
+### Nivel educativo {data-width=400}
+
+```{r}
+library(plotly)
+mergesupreme1 %>%
+  count(Nivel_Educ) %>%
+  plot_ly(x = ~Nivel_Educ, y = ~n, type = "bar",
+          marker = list(color = colores_set2)) %>%
+  layout(title = "Nivel educativo",
+         xaxis = list(title = ""),
+         yaxis = list(title = "Frecuencia")) 
+```
+
+### Tipo de Empleo {data-width=400}
+
+
+```{r}
+mergesupreme1 %>%
+  count(Tipo_empleo) %>%
+  plot_ly(x = ~Tipo_empleo, y = ~n, type = "bar",
+          marker = list(color = colores_set2)) %>%
+  layout(title = "Empleo Formal",
+         xaxis = list(title = ""),
+         yaxis = list(title = "Frecuencia")) 
+```
+
+### Uso de Internet educativo {data-width=400}
+
+
+```{r}
+mergesupreme1 %>%
+  count(InternetEduca) %>%
+  plot_ly(x = ~InternetEduca, y = ~n, type = "bar",
+          marker = list(color = colores_set2)) %>%
+  layout(title = "Uso de internet para educación",
+         xaxis = list(title = ""),
+         yaxis = list(title = "Frecuencia")) 
+```
+
+### Institución Educativa {data-icon="fa-school"}
+
+```{r}
+mergesupreme1 %>%
+  count(Institucion_educ) %>%
+  plot_ly(x = ~Institucion_educ, y = ~n, type = "bar",
+          marker = list(color = colores_set2)) %>%
+  layout(title = "Última Institución Educativa",
+         xaxis = list(title = ""),
+         yaxis = list(title = "Frecuencia"))
+```
+
+###Lengua materna {data-icon="fa-language"}
+
+```{r}
+mergesupreme1 %>%
+  count(Lengua) %>%
+  plot_ly(x = ~Lengua, y = ~n, type = "bar",
+          marker = list(color = colores_set2)) %>%
+  layout(title = "Lengua Materna",
+         xaxis = list(title = ""),
+         yaxis = list(title = "Frecuencia"))
+```
+
+### Edad {data-icon="fa-user-clock"}
+
+```{r}
+# Crear un rango de edad
+mergesupreme1 <- mergesupreme1 %>%
+  mutate(Edad_rango = cut(Edad, 
+                          breaks = c(0, 10, 20, 30, 40, 50, 60, 70, 80, 100),
+                          labels = c("0-10", "11-20", "21-30", "31-40",
+                                     "41-50", "51-60", "61-70", "71-80", "81-100"),
+                          right = FALSE))
+
+# Contar frecuencias
+edad_data <- mergesupreme1 %>%
+  count(Edad_rango)
+
+# Generar colores con Set2
+colores_set2 <- brewer.pal(n = length(levels(edad_data$Edad_rango)), "Set2")
+
+# Gráfico con colores aplicados manualmente
+plot_ly(edad_data, 
+        x = ~Edad_rango, 
+        y = ~n, 
+        type = "bar",
+        marker = list(color = colores_set2)) %>%
+  layout(title = "Distribución por Rango de Edad",
+         xaxis = list(title = "Rango de Edad"),
+         yaxis = list(title = "Frecuencia"))
+
+
+```
+
+### Sexo {data-icon="fa-venus-mars"}
+
+```{r}
+mergesupreme1 %>%
+  count(Sexo) %>%
+  plot_ly(x = ~Sexo, y = ~n, type = "bar",
+          marker = list(color = colores_set2)) %>%
+  layout(title = "Distribución por Sexo",
+         xaxis = list(title = ""),
+         yaxis = list(title = "Frecuencia"))
+```
+
+Regresión Lineal Múltiple {data-icon="fa-table"}
+=======================================================================
+
+Column {data-width=500} {.tabset}
+-----------------------------------------------------------------------
+
+```{r}
+# Definir variables comunes para todos los modelos
+vars_comunes <- c(
+  "Ingreso_total_combinado",  # Variable respuesta
+  "Nivel_Educ", "Lengua", "Edad", "Sexo",  # Comunes a todos
+  "Tipo_empleo", "UsoInternet",             # Modelos 2-4
+  "InternetEduca", "LIMITACIONES"           # Solo modelo4
+)
+
+# Crear dataset consistente sin NAs
+datos_completos <- na.omit(mergesupreme1[, vars_comunes])
+```
+
+### Modelo 1 
+
+```{r}
+modelo1 <- lm(log1p(Ingreso_total_combinado) ~ Nivel_Educ + Lengua + Edad + 
+               Sexo,
+             data = datos_completos)
+summary(modelo1)
+```
+
+### Modelo 2
+
+```{r}
+modelo2 <- lm(log1p(Ingreso_total_combinado) ~ Nivel_Educ + Tipo_empleo + Lengua + Edad + 
+               Sexo,
+             data = datos_completos)
+summary(modelo2)
+
+```
+
+### Modelo 3
+
+```{r}
+modelo3 <- lm(log1p(Ingreso_total_combinado) ~ Nivel_Educ + Tipo_empleo + 
+               UsoInternet + Lengua + Edad + Sexo,
+             data = datos_completos)
+summary(modelo3)
+
+```
+
+### Modelo 4
+
+```{r}
+modelo4 <- lm(log1p(Ingreso_total_combinado) ~ Nivel_Educ + Tipo_empleo + 
+               UsoInternet + InternetEduca + LIMITACIONES + Lengua + Edad + 
+               Sexo,
+             data = datos_completos)
+summary(modelo4)
+```
+
+### Annova
+
+```{r}
+tanova1=anova(modelo1,modelo2,modelo3,modelo4)
+kable(tanova1,
+      caption = "Tabla ANOVA para comparar modelos")%>%kableExtra::kable_styling(full_width = FALSE)
+```
+
+Cada nuevo modelo mejora significativamente al anterior, ya que:
+a. El RSS disminuye consistentemente.
+b. Los valores f-valores son altos y los p-valores son 0 (menores a 0.001).
+c. Las variables agregadas aportan explicación al modelo.
+d. Modelo 2 mejora mucho respecto al 1: agrega 2 variables y reduce el error bastante (gran Sum of Sq y F de 4891).
+e. Modelo 3 mejora, pero menos: agrega 1 variable más, y aunque mejora, su ganancia es menor.
+f. Modelo 4 también mejora: agrega 2 variables, y la mejora vuelve a ser importante (Sum of Sq ≈ 21k), aunque menor que la primera.
+
+### AIC/BIC
+
+```{r}
+
+# Crear tabla con AIC y BIC
+modelos <- list(modelo1, modelo2, modelo3, modelo4)
+nombres <- c("Modelo 1", "Modelo 2", "Modelo 3", "Modelo 4")
+
+resultados <- data.frame(
+  Modelo = nombres,
+  AIC = sapply(modelos, AIC),
+  BIC = sapply(modelos, BIC)
+)
+
+# Ordenar por BIC (o AIC si prefieres)
+resultados[order(resultados$BIC), ]
+```
+
+Sobre AIC Y BIC
+En resultados globales el modelo 4 es mejor por tener el menor AIC y BIC, tomando en cuenta que el BIC es más estricto con la complejidad del modelo, y siendo menor también el modelo 4 hemos decidido decantarnos por ese.
+
+### Interpretación de coeficientes del modelo
+
+```{r}
+resultados_modelo=broom::tidy(modelo4) %>%
+  mutate(perc_change = (exp(estimate) - 1) * 100) %>%
+  select(term, estimate, perc_change, std.error, p.value)
+summary(resultados_modelo)
+```
+Hallazgos clave del modelo final:
+1. Educación (vs. nivel inicial):
+Intermedio: -55% de ingresos
+Superior: -24% de ingresos (contrario a lo esperado)
+
+2. Empleo formal (vs. informal/sin empleo):
++96-98% más ingresos
+
+3. Acceso a internet:
++148% más ingresos
+
+4. Sin limitaciones físicas/cognitivas:
++536% más ingresos
+
+5. Edad: 
+Cada año adicional: +3% de ingresos
+
+Column derecha {data-width=500} {.tabset}
+-----------------------------------------------------------------------
+
+### Gráfico 1
+```{r}
+plot(modelo4,1)
+```
+
+### Gráfico 2
+```{r}
+plot(modelo4,2)
+```
+
+### Gráfico 3 
+```{r}
+plot(modelo4,3)
+```
+
+### Gráfico 4
+```{r}
+plot(modelo4,4)
+```
+
+
+Análsis conglomerado {data-icon="fa-table"}
+=======================================================================
+
+```{r}
+media_por_provincia <- mergesupreme1 %>%
+  mutate(provincia = limpiar_nombres(provincia)) %>%
+  group_by(provincia) %>%
+  summarise(
+    Edad_promedio = mean(Edad, na.rm = TRUE),
+    Ingreso_promedio = mean(Ingreso_total_combinado, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+moda_por_provincia <- mergesupreme1 %>%
+  mutate(provincia = limpiar_nombres(provincia)) %>%
+  group_by(provincia) %>%
+  summarise(
+    Moda_Enfermedad = names(which.max(table(Enfermedad_crónica))),
+    Moda_Lengua = names(which.max(table(Lengua))),
+    Moda_TipoContrato = names(which.max(table(Tipo_contrato))),
+    Moda_Sexo = names(which.max(table(Sexo))),
+    Moda_NivelEduc = names(which.max(table(Nivel_Educ))),
+    Moda_TipoEmpleo = names(which.max(table(Tipo_empleo))),
+    Moda_Limitaciones = names(which.max(table(LIMITACIONES))),
+    .groups = "drop"
+  )
+
+dataClus_prov <- left_join(media_por_provincia, moda_por_provincia, by = "provincia") %>%
+  mutate(
+    Enfermedad_binaria = ifelse(Moda_Enfermedad == "Sí", 1, 0),  
+    Sexo_binario = ifelse(Moda_Sexo == "Mujer", 1, 0),
+    NivelEduc_Superior = ifelse(Moda_NivelEduc == "Superior", 1, 0),
+    Lengua_Espanol = ifelse(Moda_Lengua == "Español", 1, 0),
+    Tipo_contrato_bin = ifelse(Moda_TipoContrato == "Sin contrato", 1, 0) 
+  ) %>%
+  select(
+    provincia, 
+    Edad_promedio, 
+    Ingreso_promedio,
+    Enfermedad_binaria, 
+    Sexo_binario,
+    NivelEduc_Superior, 
+    Lengua_Espanol, 
+    Tipo_contrato_bin 
+  )
+vars_cluster <- dataClus_prov %>% select(-provincia)
+vars_cluster_escalado <- scale(vars_cluster)
+rownames(vars_cluster_escalado) <- dataClus_prov$provincia
+```
+
+Column {data-width=500} {.tabset}
+-----------------------------------------------------------------------
+
+### Diagrama del Codo para Jerarquización 
+```{r}
+fviz_nbclust(vars_cluster_escalado, FUN = hcut, method = "wss") +
+  geom_vline(xintercept = 3, linetype = 2, color = "red") +
+  labs(
+    title = "Diagrama de Codo para Clustering Jerárquico",
+    x = "Número de Clústers", 
+    y = "Suma de cuadrados intra-cluster (WSS)"
+  ) +
+  theme_minimal()
+```
+
+### Diagrama de silueta AGNES
+
+```{r}
+dist_matrix <- dist(vars_cluster_escalado)
+hc <- hclust(dist_matrix, method = "ward.D2")
+grupos_prov <- cutree(hc, k = 3)  
+silueta_agnes<- silhouette(grupos_prov, dist_matrix)
+```
+
+```{r}
+fviz_silhouette(silueta_agnes) +
+  labs(
+    title = "Gráfico de Silueta para AGNES (3 Clústers)",
+    x = "Provincias",
+    y = "Ancho de Silueta"
+  ) +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2") +
+  scale_color_brewer(palette = "Set2") +
+  theme(axis.text.x = element_blank())
+
+```
+
+### Diagrama de silueta DIANA
+
+```{r}
+diana_result <- diana(vars_cluster_escalado)
+grupos_diana <- cutree(diana_result, k = 3)
+silueta_diana <- silhouette(grupos_diana, dist_matrix)
+
+fviz_silhouette(silueta_diana) +
+  labs(
+    title = "Gráfico de Silueta para DIANA (3 clústers)",
+    x = "Provincias",
+    y = "Ancho de Silueta"
+  ) +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set3") +
+  scale_color_brewer(palette = "Set3") +
+  theme(axis.text.x = element_blank())
+```
+
+Column {data-width=500} {.tabset}
+-----------------------------------------------------------------------
+
+Mapa de clusters
+```{r}
+provincias_sf <- st_read("LIM_PROVINCIAL_PERU_MIN.json", quiet = TRUE) %>%
+  mutate(provincia = limpiar_nombres(NOMBPROV))
+
+prov_cluster_df <- data.frame(
+  provincia = names(grupos_prov),
+  cluster = as.factor(grupos_prov)
+)
+
+prov_cluster_df<- prov_cluster_df %>%
+  mutate(provincia = ifelse(provincia == "Nazca", "Nasca", provincia))
+
+dataClus_prov <- dataClus_prov %>%
+  mutate(provincia = ifelse(provincia == "Nasca", "Nazca", provincia))
+
+provincias_sf<- provincias_sf %>%
+  mutate(provincia = ifelse(provincia == "Nazca", "Nasca", provincia))
+
+data_con_cluster <- left_join(dataClus_prov, prov_cluster_df, by = "provincia") %>%
+  mutate(cluster_label = recode(as.character(cluster),
+    "1" = "Alta exclusión y bajo ingreso",
+    "2" = "Mediana integración",
+    "3" = "Alta integración y mayor ingreso"
+  ))
+
+mapa_con_etiquetas <- left_join(provincias_sf, data_con_cluster, by = "provincia")
+
+renderLeaflet({
+  pal_cluster <- colorFactor(
+    palette = c("#C7E9B4", "#41B6C4", "#225EA8"),
+    domain = mapa_con_etiquetas$cluster_label
+  )
+  
+  leaflet(mapa_con_etiquetas) %>%
+    addProviderTiles("CartoDB.Positron") %>%
+    addPolygons(
+      fillColor = ~pal_cluster(cluster_label),
+      color = "white",
+      weight = 1,
+      fillOpacity = 0.8,
+      label = ~paste0(provincia, " - ", cluster_label),
+      highlightOptions = highlightOptions(weight = 2, color = "black", bringToFront = TRUE)
+    ) %>%
+    addLegend(
+      pal = pal_cluster,
+      values = ~cluster_label,
+      title = "Clúster de Provincias",
+      position = "bottomright"
+    )
+})
+
+```
+
+Alta exclusión y bajo ingreso:
+"Este grupo agrupa provincias con bajos niveles de desarrollo económico y acceso limitado a servicios básicos. Se recomienda priorizar políticas públicas focalizadas en estas zonas, como programas de inclusión social o inversión en infraestructura."
+
+Alta integración y mayor ingreso:
+"Corresponde a áreas urbanas o regiones con alta actividad económica (ej: Lima, Arequipa). Su dinamismo sugiere oportunidades para impulsar proyectos de innovación o atracción de inversiones."
+
+Mediana integración:
+"Provincias en transición, con potencial de mejora mediante estrategias de desarrollo regional que fortalezcan su conectividad y productividad."
+
+Conclusiones {data-icon="fa-table"}
+=======================================================================
+
+Column izquierda {data-width=500} {.tabset}
+-----------------------------------------------------------------------
+### **De lo analizado**
+
+1. Desigualdad estructural en Ingresos
+- 25% de hogares reportan ingresos cero, lo cual podría deberse a la alta informalidad o a la extrema pobreza.
+- Existe una brecha entre la mediana (S/186) y media (S/636.86), esto indica una distribución altamente asimétrica, con unos pocos hogares de ingresos muy altos que elevan el promedio (media), mientras que la mayoría gana bastante menos (mediana).
+
+2. Factores determinantes del Ingreso
+- Empleo formal
+- Nivel de educación
+- Género 
+- Edad 
+- Acceso a Internet
+
+3. Brechas de género
+- Mujeres ganan 60% menos que hombres (controlado por nivel de edución y edad). Esto nos indica que incluso teniendo la misma educación y edad, las mujeres siguen ganando mucho menos.
+
+4. Territorialidad de la exclusión
+- La exclusión no es aleatoria, sino estructural y territorial. Los clústeres permiten identificar patrones espaciales: mientras la costa central y algunas provincias del sur muestran una “alta integración y mayor ingreso” (celeste), gran parte de la sierra y selva sigue rezagada.
+
+### **Recomendaciones**
+
+ 1. Formalización laboral ( Clúster de Alta exclusión)
+- Crear programas de transición gradual hacia la formalidad, con incentivos fiscales y capacitación técnica.
+- Simplificar trámites para pequeños negocios y trabajadores independientes
+
+ 2. Reducir la brecha digital
+- Expandir la infraestructura en zonas rurales y periurbanas (Clúster 1 y 2)
+- Implementar programas de capacitación digital para adultos y jóvenes. 
+
+3. Cerrar la brecha de género en Ingresos
+- Fomentar la participación femenina en sectores mejores remunerados mediante becas para reducir la discrimación laboral hacia las mujeres. 
+
+4. Focalizar inversión en zonas con mayor exclusión (Clúster 3) 
+- Priorización de proyectos de infraestructura,salud y empleo en provincias con menores ingresos.
+- Impulsar industrias con potencial de crecimiento regional (ej: agroexportación, tecnología, turismo).
+
+Column {data-width=500 .tabset}
+-----------------------------------------------------------------------
+
+```{r}
+#| out.width: "100%"
+#| fig.align: "center"
+
+imagen_url <- "https://github.com/daria072004/dashboard_ingresos_peru/blob/4f599c1694aa3fc5398922c6bbe2952e9a7bfe16/007-pilares_page-0001.jpg?raw=true"
+
+# Mostrar imagen
+knitr::include_graphics(imagen_url)
+```
+
+Fuente:Banco Central de Reserva del Perú
+
